@@ -64,7 +64,7 @@ def evaluate(model, test_loader, criterion, device):
     test_loss = 0.0
     with torch.no_grad():
         for inputs, labels in test_loader:
-            # inputs, labels = inputs.to(device), labels.to(device) # not required for accelerate
+            inputs, labels = inputs.to(device), labels.to(device) # seems to be required for accelerate
             outputs = model(inputs)
             loss = criterion(outputs, labels)
             test_loss += loss.item()
