@@ -1,0 +1,10 @@
+script_path: /path/to/your/script/multi-GPU-training-torch.py
+out_dir: /path/to/your/out-dir/multi-GPU-output
+local:
+  device: cuda
+  condor:
+    bid: 100
+    num_cpus: 8
+    memory_cpus: 256000
+    num_gpus: 2
+    memory_gpus: 60000
