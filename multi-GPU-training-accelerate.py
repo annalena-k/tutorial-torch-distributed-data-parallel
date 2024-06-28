@@ -107,7 +107,7 @@ def run_training_loop(
             # Unwrap & save the distributed training interface
             accelerator.save_model(model, save_dir)
 
-    print("Finished Training (printed for every process).")
+    print("Finished Training.")
 
 
 def basic_accelerate_training(out_dir: str):

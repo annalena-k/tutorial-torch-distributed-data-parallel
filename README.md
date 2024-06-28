@@ -53,9 +53,8 @@ to specify the `map_location` in `torch.load()`.)
 
 ### Comparing PyTorch's own methods and the Huggingface `accelerate` library
 
-*PyTorch: Distributed Data Parallel (DDP)*
+**PyTorch: Distributed Data Parallel (DDP)**
 
-Tutorial: https://pytorch.org/tutorials/intermediate/ddp_tutorial.html
 With PyTorch's intrinsic functionalities, it is possible to control details of DDP training, but this also means
 that one needs to understand and deal with those lower-level functionalities.
 For example, the environment variables such as the address and port of the master process have to be set manually.
@@ -63,12 +62,14 @@ If you are running on a single node, you can set `os.environ['MASTER_ADDR'] = 'l
 need to set the IP address of each node. Since this tutorial focuses on single-node multi-GPU training, the latter will
 not be covered.
 
-*Huggingface `accelerate` library*
+For more information see the [official PyTorch tutorial](https://pytorch.org/tutorials/intermediate/ddp_tutorial.html).
 
-Tutorial: https://huggingface.co/docs/accelerate/basic_tutorials/overview
+**Huggingface `accelerate` library**
 
 Using a package like `accelerate` has the advantage of handling most DDP specific details under the hood, simplifying 
 the code for the user. However, this simplicity comes at the cost of flexibility. If you are developing a custom package 
 or codebase, you might prefer not to rely on an additional package that could introduce downstream changes. 
 Furthermore, it is known that accelerate can produce memory overhead since it creates a new version of the data 
 loaders (because `batch_sampler` cannot be changed afterwards; see [here](https://huggingface.co/docs/accelerate/concept_guides/internal_mechanism).
+
+For more information see the [Huggingface website](https://huggingface.co/docs/accelerate/basic_tutorials/overview).
