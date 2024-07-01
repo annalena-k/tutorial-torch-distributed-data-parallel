@@ -161,3 +161,10 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 .DS_Store
+
+# Tutorial specific: 
+# Downloaded training data
+data/
+# Modifications to local_settings.yaml file
+local_settings.yaml
+
