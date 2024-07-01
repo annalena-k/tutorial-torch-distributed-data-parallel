@@ -73,3 +73,37 @@ Furthermore, it is known that accelerate can produce memory overhead since it cr
 loaders (because `batch_sampler` cannot be changed afterwards; see [here](https://huggingface.co/docs/accelerate/concept_guides/internal_mechanism).
 
 For more information see the [Huggingface website](https://huggingface.co/docs/accelerate/basic_tutorials/overview).
+
+### Avoiding common DDP pitfalls
+
+- **Syncing `BatchNorm` across devices**: If you compute any values across the batch, they need to be synced across 
+devices. Examples include `torch.nn.BatchNorm` or any custom statistics. `BatchNorm` can be automatically replaced with 
+`SyncBatchNorm` by using 
+[`torch.nn.SyncBatchNorm.convert_sync_batchnorm()`](https://pytorch.org/docs/stable/generated/torch.nn.SyncBatchNorm.html#torch.nn.SyncBatchNorm.convert_sync_batchnorm) 
+before wrapping the model with `DDP`.
+- **Carefully handling random seeds**: When loading data and preparing it for training, you might be using multiple 
+random seeds. The most important examples include the Python random seed (that controls Python's `random` module), the 
+numpy random seed (that controls numpy's random number generator), and the torch random seed. 
+For reproducibility reasons, each process (one per GPU) needs to have the same initial random seed across training runs. 
+However, you might want to have different random seeds in different processes to e.g. perturb the data with different 
+noise realizations. To do so, you can pass a fixed seed to the training loop, set the python and numpy seed to this
+value and offset the torch seed by the rank of the process:
+```
+# Set seed for Python random module
+    random.seed(seed)
+    # Set seed for NumPy random module
+    np.random.seed(seed)
+    # Set seed for PyTorch CPU
+    torch.manual_seed(seed + rank)
+    if torch.cuda.is_available():
+        # Set seed for PyTorch CUDA
+        torch.cuda.manual_seed(seed + rank)
+        torch.cuda.manual_seed_all(seed + rank)
+        # Only use deterministic convolution algorithms
+        torch.backends.cudnn.deterministic = True
+```
+It is important to always check whether this leads to the expected behavior in your setting.
+The mini-batch of data should be different for each process during an epoch.
+- **Manually shuffle the data at the beginning of each epoch**: Make sure to call `train_sampler.set_epoch(epoch)`
+before creating the `DataLoader` iterator. If you don't do this, the first mini-batches of the first 
+epoch are the same as the first mini-batches of the second epoch.

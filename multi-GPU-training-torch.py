@@ -1,6 +1,8 @@
 from typing import Callable
 import argparse
+import numpy as np
 import os
+import random
 import yaml
 
 import torch
@@ -24,8 +26,18 @@ def setup(rank: int, world_size: int):
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "12355"
 
-    # initialize the process group
-    dist.init_process_group("gloo", rank=rank, world_size=world_size)
+    # Initialize the process group
+    if dist.is_nccl_available():
+        dist.init_process_group(backend="nccl", rank=rank, world_size=world_size)
+    elif dist.is_gloo_available():
+        dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+    else:
+        raise ValueError(
+            "Both backends nccl and gloo not available for multi-GPU training with distributed data "
+            "parallel. Go back to single-GPU training."
+        )
+    # Assign correct device to process
+    torch.cuda.set_device(rank)
 
 
 def cleanup():
@@ -40,7 +52,9 @@ def setup_dataloaders(world_size: int, rank: int):
     train_dataset, test_dataset = load_datasets()
 
     # Create DistributedSampler
-    train_sampler = DistributedSampler(train_dataset, num_replicas=world_size, rank=rank)
+    train_sampler = DistributedSampler(
+        train_dataset, num_replicas=world_size, rank=rank
+    )
     test_sampler = DistributedSampler(test_dataset, num_replicas=world_size, rank=rank)
 
     # Include samplers when creating the datasets
@@ -59,14 +73,22 @@ def setup_dataloaders(world_size: int, rank: int):
         pin_memory=True,
     )
 
-    return train_loader, test_loader
+    return train_loader, test_loader, train_sampler
 
 
 def train(model, train_loader, criterion: Callable, optimizer: optim.Optimizer, device):
     model.train()
     running_loss = 0.0
-    for inputs, labels in train_loader:
+    for batch_idx, (inputs, labels) in train_loader:
         inputs, labels = inputs.to(device), labels.to(device)
+
+        current_seed = torch.initial_seed()
+        print(
+            f"Device {device}, Batch {batch_idx}, torch seed {current_seed}, Data {inputs[:5, :5]}"
+        )
+        print(
+            f"Python random state: {random.getstate()}, numpy random state: {np.random.get_state()}"
+        )
 
         # Zero the parameter gradients
         optimizer.zero_grad()
@@ -104,6 +126,7 @@ def evaluate(model, test_loader, criterion, device):
 def run_training_loop(
     model,
     train_loader,
+    train_sampler,
     test_loader,
     criterion,
     optimizer: optim.Optimizer,
@@ -114,6 +137,9 @@ def run_training_loop(
     checkpoint_epoch=5,
 ):
     for epoch in range(num_epochs):
+        print(f"Epoch {epoch}, set epoch disabled")
+        # train_sampler.set_epoch(epoch)  # Ensure shuffling is done differently each epoch
+
         train_loss = train(model, train_loader, criterion, optimizer, device)
         test_loss, test_accuracy = evaluate(model, test_loader, criterion, device)
 
@@ -141,7 +167,7 @@ def basic_DDP_training_loop(rank: int, world_size: int, save_dir: str):
     setup(rank, world_size)
 
     # Load data and model
-    train_loader, test_loader = setup_dataloaders(world_size, rank)
+    train_loader, test_loader, train_sampler = setup_dataloaders(world_size, rank)
     model = load_model()
 
     # Move the model to the appropriate GPU
@@ -158,6 +184,7 @@ def basic_DDP_training_loop(rank: int, world_size: int, save_dir: str):
     run_training_loop(
         ddp_model,
         train_loader,
+        train_sampler,
         test_loader,
         criterion,
         optimizer,
