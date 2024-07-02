@@ -79,7 +79,8 @@ def setup_dataloaders(world_size: int, rank: int):
 def train(model, train_loader, criterion: Callable, optimizer: optim.Optimizer, device):
     model.train()
     running_loss = 0.0
-    for batch_idx, (inputs, labels) in train_loader:
+    batch_idx = 0
+    for inputs, labels in train_loader:
         inputs, labels = inputs.to(device), labels.to(device)
 
         current_seed = torch.initial_seed()
@@ -101,6 +102,7 @@ def train(model, train_loader, criterion: Callable, optimizer: optim.Optimizer, 
         loss.backward()
         optimizer.step()
 
+        batch_idx += 1
         running_loss += loss.item()
     return running_loss / len(train_loader)
 
