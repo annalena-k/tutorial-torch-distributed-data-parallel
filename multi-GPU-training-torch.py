@@ -44,6 +44,24 @@ def cleanup():
     dist.destroy_process_group()
 
 
+def set_seed_based_on_rank(rank: int):
+    """
+    Sets Python, Numpy, and Torch seeds for each GPU process based on the torch seed
+    to ensure that they are different.
+    """
+    initial_torch_seed = torch.initial_seed()
+    torch.manual_seed(initial_torch_seed + rank)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(initial_torch_seed + rank)
+        # Only use deterministic convolution algorithms
+        torch.backends.cudnn.deterministic = True
+
+    # Numpy and Python expect a different seed range
+    reduced_seed = int(initial_torch_seed) % (2 ** 32 - 1)
+    random.seed(reduced_seed + rank)
+    np.random.seed(reduced_seed + rank)
+
+
 def setup_dataloaders(world_size: int, rank: int):
     """
     Load CIFAR-10 dataset and prepare torch dataloader for distributed training with DistributedSamplers.
@@ -132,10 +150,10 @@ def run_training_loop(
     device: torch.device,
     rank: int,
     save_dir: str,
-    num_epochs: int=20,
-    checkpoint_epoch: int=5,
-    set_epoch: bool=True,
-    print_rand: bool=False
+    num_epochs: int = 20,
+    checkpoint_epoch: int = 5,
+    set_epoch: bool = True,
+    print_rand: bool = False
 ):
 
     for epoch in range(num_epochs):
@@ -174,6 +192,9 @@ def basic_DDP_training_loop(rank: int, world_size: int, save_dir: str, optional_
     print(f"Running DDP checkpoint example on rank {rank}.")
     # Initialize process group
     setup(rank, world_size)
+
+    # Set seeds on different GPUs based on rank
+    set_seed_based_on_rank(rank)
 
     # Load data and model
     train_loader, test_loader, train_sampler = setup_dataloaders(world_size, rank)

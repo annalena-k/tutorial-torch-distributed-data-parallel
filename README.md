@@ -62,7 +62,7 @@ If you are running on a single node, you can set `os.environ['MASTER_ADDR'] = 'l
 need to set the IP address of each node. Since this tutorial focuses on single-node multi-GPU training, the latter will
 not be covered.
 
-For more information see the [official PyTorch tutorial](https://pytorch.org/tutorials/intermediate/ddp_tutorial.html).
+For more information see the official PyTorch tutorials, e.g. [here](https://pytorch.org/tutorials/intermediate/ddp_tutorial.html) and [here](https://pytorch.org/tutorials/beginner/ddp_series_multigpu.html?highlight=distributed%20sampler).
 
 **Huggingface `accelerate` library**
 
@@ -78,32 +78,18 @@ For more information see the [Huggingface website](https://huggingface.co/docs/a
 
 - **Syncing `BatchNorm` across devices**: If you compute any values across the batch, they need to be synced across 
 devices. Examples include `torch.nn.BatchNorm` or any custom statistics. `BatchNorm` can be automatically replaced with 
-`SyncBatchNorm` by using 
-[`torch.nn.SyncBatchNorm.convert_sync_batchnorm()`](https://pytorch.org/docs/stable/generated/torch.nn.SyncBatchNorm.html#torch.nn.SyncBatchNorm.convert_sync_batchnorm) 
-before wrapping the model with `DDP`.
+`SyncBatchNorm` by using [`torch.nn.SyncBatchNorm.convert_sync_batchnorm()`](https://pytorch.org/docs/stable/generated/torch.nn.SyncBatchNorm.html#torch.nn.SyncBatchNorm.convert_sync_batchnorm) before wrapping the model with `DDP`.
+- **Manually shuffle the data at the beginning of each epoch**: Make sure to call `train_sampler.set_epoch(epoch)`
+before creating the `DataLoader` iterator. If you don't do this, the first mini-batch of one 
+epoch is the same as the first mini-batch of another epoch.
 - **Carefully handling random seeds**: When loading data and preparing it for training, you might be using multiple 
 random seeds. The most important examples include the Python random seed (that controls Python's `random` module), the 
 numpy random seed (that controls numpy's random number generator), and the torch random seed. 
-For reproducibility reasons, each process (one per GPU) needs to have the same initial random seed across training runs. 
-However, you might want to have different random seeds in different processes to e.g. perturb the data with different 
-noise realizations. To do so, you can pass a fixed seed to the training loop, set the python and numpy seed to this
-value and offset the torch seed by the rank of the process:
-```
-# Set seed for Python random module
-    random.seed(seed)
-    # Set seed for NumPy random module
-    np.random.seed(seed)
-    # Set seed for PyTorch CPU
-    torch.manual_seed(seed + rank)
-    if torch.cuda.is_available():
-        # Set seed for PyTorch CUDA
-        torch.cuda.manual_seed(seed + rank)
-        torch.cuda.manual_seed_all(seed + rank)
-        # Only use deterministic convolution algorithms
-        torch.backends.cudnn.deterministic = True
-```
-It is important to always check whether this leads to the expected behavior in your setting.
-The mini-batch of data should be different for each process during an epoch.
-- **Manually shuffle the data at the beginning of each epoch**: Make sure to call `train_sampler.set_epoch(epoch)`
-before creating the `DataLoader` iterator. If you don't do this, the first mini-batches of the first 
-epoch are the same as the first mini-batches of the second epoch.
+Although the torch seeds are set to different values by `torch.multiprocessing.spawn(...)`, most developers do not trust
+this and set their seeds offset all seeds by the rank of the process. This enforces that the seed is different for 
+each GPU. It is important to always check whether this leads to the expected behavior in your setting.
+You can check, for example, whether the mini-batch of data is different for each process during an epoch.
+- **Clip gradients before they are aggregated**: If you clip the gradients before calling `loss.backward()`, it might 
+happen that the undesired gradient values (e.g. nan) are still present during the gradient aggregation step and screw up
+the accumulated gradient. If one GPU obtains a suboptimal gradient, it should not influence the gradients of the others. 
+Therefore, make sure that the gradient clipping is performed before the gradient values are aggregated.
