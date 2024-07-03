@@ -44,6 +44,11 @@ def cleanup():
     dist.destroy_process_group()
 
 
+def sum_across_devices(tensor):
+    dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
+    return tensor
+
+
 def set_seed_based_on_rank(rank: int):
     """
     Sets Python, Numpy, and Torch seeds for each GPU process based on the torch seed
@@ -96,8 +101,9 @@ def setup_dataloaders(world_size: int, rank: int):
 
 def train(model, train_loader, criterion: Callable, optimizer: optim.Optimizer, device):
     model.train()
-    running_loss = 0.0
+    total_running_loss = 0.0
     batch_idx = 0
+    n_samples = 0
     for inputs, labels in train_loader:
         inputs, labels = inputs.to(device), labels.to(device)
         
@@ -118,26 +124,31 @@ def train(model, train_loader, criterion: Callable, optimizer: optim.Optimizer, 
         optimizer.step()
 
         batch_idx += 1
-        running_loss += loss.item()
-    return running_loss / len(train_loader)
+        batch_size = inputs.shape[0]
+        n_samples += batch_size
+        total_running_loss += loss.item() * batch_size
+
+    return total_running_loss, n_samples
 
 
 def evaluate(model, test_loader, criterion, device):
     model.eval()
     correct = 0
     total = 0
-    test_loss = 0.0
+    total_test_loss = 0.0
     with torch.no_grad():
         for inputs, labels in test_loader:
             inputs, labels = inputs.to(device), labels.to(device)
             outputs = model(inputs)
             loss = criterion(outputs, labels)
-            test_loss += loss.item()
+
+            batch_size = inputs.shape[0]
+            total_test_loss += loss.item() * batch_size
             _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
+            total += batch_size
             correct += (predicted == labels).sum().item()
-    accuracy = 100 * correct / total
-    return test_loss / len(test_loader), accuracy
+
+    return total_test_loss, correct, total
 
 
 def run_training_loop(
@@ -167,11 +178,22 @@ def run_training_loop(
             print(f"Dev {device}, Python random state: {random.getstate()[1][:3]}, numpy random state: {np.random.get_state()[1][:3]}")
             print(f"Dev {device}, Torch initial_seed: {torch.initial_seed()}")
 
-        train_loss = train(model, train_loader, criterion, optimizer, device)
-        test_loss, test_accuracy = evaluate(model, test_loader, criterion, device)
+        total_train_loss, n_samples_train = train(model, train_loader, criterion, optimizer, device)
+        total_test_loss, n_correct, n_samples_test = evaluate(model, test_loader, criterion, device)
 
-        # only print loss vals for one process
+        # Only aggregate and print loss vals for one process
         if rank == 0:
+            # Aggregate loss values
+            total_train_loss = sum_across_devices(total_train_loss)
+            n_samples_train = sum_across_devices(n_samples_train)
+            train_loss = total_train_loss / n_samples_train
+
+            total_test_loss = sum_across_devices(total_test_loss)
+            n_correct = sum_across_devices(n_correct)
+            n_samples_test = sum_across_devices(n_samples_test)
+            test_loss = total_test_loss / n_samples_test
+            test_accuracy = 100 * n_correct / n_samples_test
+
             print(
                 f"Epoch {epoch + 1}/{num_epochs}, "
                 f"Train Loss: {train_loss:.4f}, "
