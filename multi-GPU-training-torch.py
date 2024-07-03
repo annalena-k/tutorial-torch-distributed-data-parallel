@@ -50,6 +50,17 @@ def sum_across_devices(tensor):
     return tensor
 
 
+def print_process_group_info():
+    """Print information about the default process group."""
+    backend = dist.get_backend()
+    rank = dist.get_rank()
+    world_size = dist.get_world_size()
+
+    print(f"Process Group Backend: {backend}")
+    print(f"Rank: {rank}")
+    print(f"World Size: {world_size}")
+
+
 def set_seed_based_on_rank(rank: int):
     """
     Sets Python, Numpy, and Torch seeds for each GPU process based on the torch seed
@@ -183,9 +194,11 @@ def run_training_loop(
         total_train_loss, n_samples_train = train(model, train_loader, criterion, optimizer, device)
         total_test_loss, n_correct, n_samples_test = evaluate(model, test_loader, criterion, device)
 
+        print_process_group_info()
+
         # Ensure all processes have reached this point
         print(f"Process {rank} is waiting at barrier.")
-        dist.barrier(timeout=timedelta(seconds=30))
+        dist.monitored_barrier(timeout=timedelta(seconds=30))
         print(f"Process {rank} passed the barrier.")
 
         print(f"Train loss on device {device}: {total_train_loss.item() / n_samples_train.item()}")
