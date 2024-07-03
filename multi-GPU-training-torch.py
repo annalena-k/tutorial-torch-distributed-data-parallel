@@ -101,13 +101,13 @@ def setup_dataloaders(world_size: int, rank: int):
 
 def train(model, train_loader, criterion: Callable, optimizer: optim.Optimizer, device):
     model.train()
-    total_running_loss = 0.0
-    batch_idx = 0
-    n_samples = 0
+    total_running_loss = torch.Tensor(0., device=device)
+    batch_idx = torch.Tensor(0, device=device)
+    n_samples = torch.Tensor(0, device=device)
     for inputs, labels in train_loader:
         inputs, labels = inputs.to(device), labels.to(device)
         
-        if batch_idx%100 == 0:
+        if batch_idx % 100 == 0:
             print(
                     f"Device {device}, Batch {batch_idx}, Data {inputs[0,0,100,100:104]}"
             )
@@ -124,7 +124,7 @@ def train(model, train_loader, criterion: Callable, optimizer: optim.Optimizer, 
         optimizer.step()
 
         batch_idx += 1
-        batch_size = inputs.shape[0]
+        batch_size = torch.Tensor(inputs.shape[0], device=device)
         n_samples += batch_size
         total_running_loss += loss.item() * batch_size
 
@@ -133,16 +133,16 @@ def train(model, train_loader, criterion: Callable, optimizer: optim.Optimizer, 
 
 def evaluate(model, test_loader, criterion, device):
     model.eval()
-    correct = 0
-    total = 0
-    total_test_loss = 0.0
+    correct = torch.Tensor(0, device=device)
+    total = torch.Tensor(0, device=device)
+    total_test_loss = torch.Tensor(0., device=device)
     with torch.no_grad():
         for inputs, labels in test_loader:
             inputs, labels = inputs.to(device), labels.to(device)
             outputs = model(inputs)
             loss = criterion(outputs, labels)
 
-            batch_size = inputs.shape[0]
+            batch_size = torch.Tensor(inputs.shape[0], device=device)
             total_test_loss += loss.item() * batch_size
             _, predicted = torch.max(outputs.data, 1)
             total += batch_size
@@ -180,6 +180,9 @@ def run_training_loop(
 
         total_train_loss, n_samples_train = train(model, train_loader, criterion, optimizer, device)
         total_test_loss, n_correct, n_samples_test = evaluate(model, test_loader, criterion, device)
+
+        # Ensure all processes have reached this point
+        dist.barrier()
 
         # Only aggregate and print loss vals for one process
         if rank == 0:
