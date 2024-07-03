@@ -49,7 +49,7 @@ def cleanup():
 
 
 def sum_across_devices(tensor):
-    dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
+    dist.all_reduce(tensor)
     return tensor
 
 
@@ -189,12 +189,13 @@ def run_training_loop(
         print(f"Train loss on device {device}: {total_train_loss.item() / n_samples_train.item()}")
 
         # Ensure all processes have reached this point
-        print(f"Process with {rank} is waiting at barrier.")
-        dist.barrier()
-        print(f"Process with {rank} passed the barrier.")
+        #print(f"Process with {rank} is waiting at barrier.")
+        #dist.barrier()
+        #print(f"Process with {rank} passed the barrier.")
 
         # Only aggregate and print loss vals for one process
         if rank == 0:
+            print("Aggregating loss values ...")
             # Aggregate loss values
             total_train_loss = sum_across_devices(total_train_loss)
             n_samples_train = sum_across_devices(n_samples_train)
