@@ -4,6 +4,7 @@ import numpy as np
 import os
 import random
 import yaml
+from datetime import timedelta
 
 import torch
 import torch.nn as nn
@@ -102,14 +103,14 @@ def setup_dataloaders(world_size: int, rank: int):
 def train(model, train_loader, criterion: Callable, optimizer: optim.Optimizer, device):
     model.train()
     total_running_loss = torch.zeros(1, device=device)
-    batch_idx = torch.zeros(1, device=device)
+    batch_idx = 0
     n_samples = torch.zeros(1, device=device)
     for inputs, labels in train_loader:
         inputs, labels = inputs.to(device), labels.to(device)
         
         if batch_idx % 100 == 0:
             print(
-                    f"Device {device}, Batch {batch_idx}, Data {inputs[0,0,100,100:104]}"
+                    f"Device {device}, Batch {batch_idx}, Data {inputs[0,0,100,100:104].item()}"
             )
         
         # Zero the parameter gradients
@@ -175,16 +176,19 @@ def run_training_loop(
             print("DistributedSampler.set_epoch:", set_epoch)
         
         if print_rand:
-            print(f"Dev {device}, Python random state: {random.getstate()[1][:3]}, numpy random state: {np.random.get_state()[1][:3]}")
+            print(f"Dev {device}, Python random state: {random.getstate()[1][:3]}, "
+                  f"numpy random state: {np.random.get_state()[1][:3]}")
             print(f"Dev {device}, Torch initial_seed: {torch.initial_seed()}")
 
         total_train_loss, n_samples_train = train(model, train_loader, criterion, optimizer, device)
         total_test_loss, n_correct, n_samples_test = evaluate(model, test_loader, criterion, device)
 
         # Ensure all processes have reached this point
-        dist.barrier()
+        print(f"Process {rank} is waiting at barrier.")
+        dist.barrier(timeout=timedelta(seconds=30))
+        print(f"Process {rank} passed the barrier.")
 
-        print(f"Train loss on device {device}: {total_train_loss / n_samples_train}")
+        print(f"Train loss on device {device}: {total_train_loss.item() / n_samples_train.item()}")
 
         # Only aggregate and print loss vals for one process
         if rank == 0:
