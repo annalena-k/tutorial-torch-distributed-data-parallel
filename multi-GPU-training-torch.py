@@ -198,7 +198,7 @@ def run_training_loop(
 
         # Ensure all processes have reached this point
         print(f"Process {rank} is waiting at barrier.")
-        dist.monitored_barrier(timeout=timedelta(seconds=30))
+        dist.barrier()
         print(f"Process {rank} passed the barrier.")
 
         print(f"Train loss on device {device}: {total_train_loss.item() / n_samples_train.item()}")
