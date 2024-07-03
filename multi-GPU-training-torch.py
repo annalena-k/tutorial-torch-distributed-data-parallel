@@ -4,7 +4,10 @@ import numpy as np
 import os
 import random
 import yaml
-from datetime import timedelta
+
+# Debug things
+os.environ['NCCL_DEBUG'] = 'INFO'
+os.environ['NCCL_DEBUG_SUBSYS'] = 'COLL'
 
 import torch
 import torch.nn as nn
@@ -140,6 +143,7 @@ def evaluate(model, test_loader, criterion, device):
     correct = torch.zeros(1, device=device)
     total = torch.zeros(1, device=device)
     total_test_loss = torch.zeros(1, device=device)
+    batch_idx = 0
     with torch.no_grad():
         for inputs, labels in test_loader:
             inputs, labels = inputs.to(device), labels.to(device)
@@ -151,6 +155,12 @@ def evaluate(model, test_loader, criterion, device):
             _, predicted = torch.max(outputs.data, 1)
             total += batch_size
             correct += (predicted == labels).sum().item()
+
+            if batch_idx % 100 == 0:
+                print(
+                    f"TEST: Device {device}, Batch {batch_idx}, Data {inputs[0, 0, 100, 100:104]}"
+                )
+            batch_idx += int(batch_size)
 
     return total_test_loss, correct, total
 
