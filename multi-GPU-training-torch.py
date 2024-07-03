@@ -184,6 +184,8 @@ def run_training_loop(
         # Ensure all processes have reached this point
         dist.barrier()
 
+        print(f"Train loss on device {device}: {total_train_loss / n_samples_train}")
+
         # Only aggregate and print loss vals for one process
         if rank == 0:
             # Aggregate loss values
@@ -199,9 +201,9 @@ def run_training_loop(
 
             print(
                 f"Epoch {epoch + 1}/{num_epochs}, "
-                f"Train Loss: {train_loss:.4f}, "
-                f"Test Loss: {test_loss:.4f}, "
-                f"Test Accuracy: {test_accuracy:.2f}%"
+                f"Train Loss: {train_loss.item():.4f}, "
+                f"Test Loss: {test_loss.item():.4f}, "
+                f"Test Accuracy: {test_accuracy.item():.2f}%"
             )
 
         if epoch % checkpoint_epoch == 0:
