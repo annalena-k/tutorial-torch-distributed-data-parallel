@@ -110,7 +110,7 @@ def train(model, train_loader, criterion: Callable, optimizer: optim.Optimizer, 
         
         if batch_idx % 100 == 0:
             print(
-                    f"Device {device}, Batch {batch_idx}, Data {inputs[0,0,100,100:104].item()}"
+                    f"Device {device}, Batch {batch_idx}, Data {inputs[0,0,100,100:104]}"
             )
         
         # Zero the parameter gradients
