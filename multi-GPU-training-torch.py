@@ -40,6 +40,9 @@ def setup(rank: int, world_size: int):
     # Assign correct device to process
     torch.cuda.set_device(rank)
 
+    print(f"Process group initialized with backend {dist.get_backend()}, rank {dist.get_rank()}, "
+          f"world size {dist.get_world_size()}.")
+
 
 def cleanup():
     dist.destroy_process_group()
@@ -48,17 +51,6 @@ def cleanup():
 def sum_across_devices(tensor):
     dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
     return tensor
-
-
-def print_process_group_info():
-    """Print information about the default process group."""
-    backend = dist.get_backend()
-    rank = dist.get_rank()
-    world_size = dist.get_world_size()
-
-    print(f"Process Group Backend: {backend}")
-    print(f"Rank: {rank}")
-    print(f"World Size: {world_size}")
 
 
 def set_seed_based_on_rank(rank: int):
@@ -194,14 +186,12 @@ def run_training_loop(
         total_train_loss, n_samples_train = train(model, train_loader, criterion, optimizer, device)
         total_test_loss, n_correct, n_samples_test = evaluate(model, test_loader, criterion, device)
 
-        print_process_group_info()
+        print(f"Train loss on device {device}: {total_train_loss.item() / n_samples_train.item()}")
 
         # Ensure all processes have reached this point
-        print(f"Process {rank} is waiting at barrier.")
+        print(f"Process with {rank} is waiting at barrier.")
         dist.barrier()
-        print(f"Process {rank} passed the barrier.")
-
-        print(f"Train loss on device {device}: {total_train_loss.item() / n_samples_train.item()}")
+        print(f"Process with {rank} passed the barrier.")
 
         # Only aggregate and print loss vals for one process
         if rank == 0:
