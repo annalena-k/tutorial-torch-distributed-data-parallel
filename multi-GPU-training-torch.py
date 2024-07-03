@@ -53,9 +53,9 @@ def setup_dataloaders(world_size: int, rank: int):
 
     # Create DistributedSampler
     train_sampler = DistributedSampler(
-        train_dataset, num_replicas=world_size, rank=rank
+        train_dataset, shuffle=True, num_replicas=world_size, rank=rank
     )
-    test_sampler = DistributedSampler(test_dataset, num_replicas=world_size, rank=rank)
+    test_sampler = DistributedSampler(test_dataset, shuffle=True, num_replicas=world_size, rank=rank)
 
     # Include samplers when creating the datasets
     train_loader = torch.utils.data.DataLoader(
@@ -82,15 +82,12 @@ def train(model, train_loader, criterion: Callable, optimizer: optim.Optimizer, 
     batch_idx = 0
     for inputs, labels in train_loader:
         inputs, labels = inputs.to(device), labels.to(device)
-
-        current_seed = torch.initial_seed()
-        print(
-            f"Device {device}, Batch {batch_idx}, torch seed {current_seed}, Data {inputs[:5, :5]}"
-        )
-        print(
-            f"Python random state: {random.getstate()}, numpy random state: {np.random.get_state()}"
-        )
-
+        
+        if batch_idx%100 == 0:
+            print(
+                    f"Device {device}, Batch {batch_idx}, Data {inputs[0,0,100,100:104]}"
+            )
+        
         # Zero the parameter gradients
         optimizer.zero_grad()
 
@@ -135,12 +132,22 @@ def run_training_loop(
     device: torch.device,
     rank: int,
     save_dir: str,
-    num_epochs=20,
-    checkpoint_epoch=5,
+    num_epochs: int=20,
+    checkpoint_epoch: int=5,
+    set_epoch: bool=True,
+    print_rand: bool=False
 ):
+
     for epoch in range(num_epochs):
-        print(f"Epoch {epoch}, set epoch disabled")
-        # train_sampler.set_epoch(epoch)  # Ensure shuffling is done differently each epoch
+        print(f"Device {device}, Epoch {epoch}")
+        if set_epoch:
+            # Ensure shuffling is done differently every epoch
+            train_sampler.set_epoch(epoch)
+            print("DistributedSampler.set_epoch:", set_epoch)
+        
+        if print_rand:
+            print(f"Dev {device}, Python random state: {random.getstate()[1][:3]}, numpy random state: {np.random.get_state()[1][:3]}")
+            print(f"Dev {device}, Torch initial_seed: {torch.initial_seed()}")
 
         train_loss = train(model, train_loader, criterion, optimizer, device)
         test_loss, test_accuracy = evaluate(model, test_loader, criterion, device)
@@ -160,10 +167,10 @@ def run_training_loop(
                 ckpt_path = os.path.join(save_dir, f"ckpt_{epoch}.pt")
                 torch.save(model.state_dict(), ckpt_path)
 
-    print("Finished Training (printed for every process).")
+    print(f"Finished Training on device {device}.")
 
 
-def basic_DDP_training_loop(rank: int, world_size: int, save_dir: str):
+def basic_DDP_training_loop(rank: int, world_size: int, save_dir: str, optional_args: dict):
     print(f"Running DDP checkpoint example on rank {rank}.")
     # Initialize process group
     setup(rank, world_size)
@@ -193,13 +200,15 @@ def basic_DDP_training_loop(rank: int, world_size: int, save_dir: str):
         device,
         rank,
         save_dir,
+        set_epoch=optional_args["set_epoch"],
+        print_rand=optional_args["print_rand"],
     )
 
     # Destroy process group
     cleanup()
 
 
-def run_DDP_training(demo_fn, world_size: int, save_dir: str):
+def run_DDP_training(demo_fn, world_size: int, save_dir: str, optional_args: dict):
     """
     Main function to spawn DDP processes across multiple GPUs
 
@@ -209,7 +218,7 @@ def run_DDP_training(demo_fn, world_size: int, save_dir: str):
     world_size: number of processes = GPUs
     save_dir: directory to save output
     """
-    mp.spawn(demo_fn, args=(world_size, save_dir), nprocs=world_size, join=True)
+    mp.spawn(demo_fn, args=(world_size, save_dir, optional_args), nprocs=world_size, join=True)
 
 
 if __name__ == "__main__":
@@ -237,5 +246,7 @@ if __name__ == "__main__":
 
     # Specify the number of processes (typically the number of GPUs available)
     world_size = settings["local"]["condor"]["num_gpus"]
+    
+    optional_args = settings["optional_args"]
 
-    run_DDP_training(basic_DDP_training_loop, world_size, out_dir)
+    run_DDP_training(basic_DDP_training_loop, world_size, out_dir, optional_args)
