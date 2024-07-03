@@ -101,9 +101,9 @@ def setup_dataloaders(world_size: int, rank: int):
 
 def train(model, train_loader, criterion: Callable, optimizer: optim.Optimizer, device):
     model.train()
-    total_running_loss = torch.Tensor(0., device=device)
-    batch_idx = torch.Tensor(0, device=device)
-    n_samples = torch.Tensor(0, device=device)
+    total_running_loss = torch.zeros(1, device=device)
+    batch_idx = torch.zeros(1, device=device)
+    n_samples = torch.zeros(1, device=device)
     for inputs, labels in train_loader:
         inputs, labels = inputs.to(device), labels.to(device)
         
@@ -124,7 +124,7 @@ def train(model, train_loader, criterion: Callable, optimizer: optim.Optimizer, 
         optimizer.step()
 
         batch_idx += 1
-        batch_size = torch.Tensor(inputs.shape[0], device=device)
+        batch_size = torch.tensor(inputs.shape[0], device=device)
         n_samples += batch_size
         total_running_loss += loss.item() * batch_size
 
@@ -133,16 +133,16 @@ def train(model, train_loader, criterion: Callable, optimizer: optim.Optimizer, 
 
 def evaluate(model, test_loader, criterion, device):
     model.eval()
-    correct = torch.Tensor(0, device=device)
-    total = torch.Tensor(0, device=device)
-    total_test_loss = torch.Tensor(0., device=device)
+    correct = torch.zeros(1, device=device)
+    total = torch.zeros(1, device=device)
+    total_test_loss = torch.zeros(1, device=device)
     with torch.no_grad():
         for inputs, labels in test_loader:
             inputs, labels = inputs.to(device), labels.to(device)
             outputs = model(inputs)
             loss = criterion(outputs, labels)
 
-            batch_size = torch.Tensor(inputs.shape[0], device=device)
+            batch_size = torch.tensor(inputs.shape[0], device=device)
             total_test_loss += loss.item() * batch_size
             _, predicted = torch.max(outputs.data, 1)
             total += batch_size
