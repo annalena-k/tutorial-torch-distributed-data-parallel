@@ -51,11 +51,6 @@ def cleanup():
     dist.destroy_process_group()
 
 
-def sum_across_devices(tensor):
-    dist.all_reduce(tensor)
-    return tensor
-
-
 def set_seed_based_on_rank(rank: int):
     """
     Sets Python, Numpy, and Torch seeds for each GPU process based on the torch seed
@@ -211,14 +206,14 @@ def run_training_loop(
 
                 print("Aggregating loss values ...")
                 # Aggregate loss values
-                train_loss = torch.zeros(1, device=device)
-                train_loss = sum_across_devices(total_train_loss)
-                n_samples_train = sum_across_devices(n_samples_train)
-                train_loss = train_loss / n_samples_train
+                dist.all_reduce(total_train_loss)
+                dist.all_reduce(n_samples_train)
+                print(f"all_reduce train loss {total_train_loss}")
+                train_loss = total_train_loss / n_samples_train
 
-                total_test_loss = sum_across_devices(total_test_loss)
-                n_correct = sum_across_devices(n_correct)
-                n_samples_test = sum_across_devices(n_samples_test)
+                dist.all_reduce(total_test_loss)
+                dist.all_reduce(n_correct)
+                dist.all_reduce(n_samples_test)
                 test_loss = total_test_loss / n_samples_test
                 test_accuracy = 100 * n_correct / n_samples_test
             else:
