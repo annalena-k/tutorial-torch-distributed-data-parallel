@@ -6,8 +6,8 @@ import random
 import yaml
 
 # Debug things
-os.environ['NCCL_DEBUG'] = 'INFO'
-os.environ['NCCL_DEBUG_SUBSYS'] = 'COLL'
+# os.environ['NCCL_DEBUG'] = 'INFO'
+# os.environ['NCCL_DEBUG_SUBSYS'] = 'COLL'
 
 import torch
 import torch.nn as nn
@@ -178,7 +178,8 @@ def run_training_loop(
     num_epochs: int = 20,
     checkpoint_epoch: int = 5,
     set_epoch: bool = True,
-    print_rand: bool = False
+    print_rand: bool = False,
+    aggregate_loss: bool = False,
 ):
     print(f"Training on {len(train_loader)} samples, test on {len(test_loader)} samples")
 
@@ -200,31 +201,36 @@ def run_training_loop(
         total_test_loss, n_correct, n_samples_test = evaluate(model, test_loader, criterion, device)
         print(f"Test loss on device {device}: {total_test_loss.item() / n_samples_test.item()}")
 
-        # Ensure all processes have reached this point
-        #print(f"Process with {rank} is waiting at barrier.")
-        #dist.barrier()
-        #print(f"Process with {rank} passed the barrier.")
-
-        # Only aggregate and print loss vals for one process
+        # Only (aggregate and) print loss vals for one process
         if rank == 0:
-            print("Aggregating loss values ...")
-            # Aggregate loss values
-            train_loss = torch.zeros(1, device=device)
-            train_loss = sum_across_devices(total_train_loss)
-            #n_samples_train = sum_across_devices(n_samples_train)
-            #train_loss = total_train_loss / n_samples_train
+            if aggregate_loss:
+                # Ensure all processes have reached this point
+                # print(f"Process with {rank} is waiting at barrier.")
+                # dist.barrier()
+                # print(f"Process with {rank} passed the barrier.")
 
-            #total_test_loss = sum_across_devices(total_test_loss)
-            #n_correct = sum_across_devices(n_correct)
-            #n_samples_test = sum_across_devices(n_samples_test)
-            #test_loss = total_test_loss / n_samples_test
-            #test_accuracy = 100 * n_correct / n_samples_test
+                print("Aggregating loss values ...")
+                # Aggregate loss values
+                train_loss = torch.zeros(1, device=device)
+                train_loss = sum_across_devices(total_train_loss)
+                n_samples_train = sum_across_devices(n_samples_train)
+                train_loss = train_loss / n_samples_train
+
+                total_test_loss = sum_across_devices(total_test_loss)
+                n_correct = sum_across_devices(n_correct)
+                n_samples_test = sum_across_devices(n_samples_test)
+                test_loss = total_test_loss / n_samples_test
+                test_accuracy = 100 * n_correct / n_samples_test
+            else:
+                train_loss = total_train_loss / n_samples_train
+                test_loss = total_test_loss / n_samples_test
+                test_accuracy = 100 * n_correct / n_samples_test
 
             print(
                 f"Epoch {epoch + 1}/{num_epochs}, "
                 f"Train Loss: {train_loss.item():.4f}, "
-                #f"Test Loss: {test_loss.item():.4f}, "
-                #f"Test Accuracy: {test_accuracy.item():.2f}%"
+                f"Test Loss: {test_loss.item():.4f}, "
+                f"Test Accuracy: {test_accuracy.item():.2f}%"
             )
 
         if epoch % checkpoint_epoch == 0:
@@ -269,8 +275,9 @@ def basic_DDP_training_loop(rank: int, world_size: int, save_dir: str, optional_
         device,
         rank,
         save_dir,
-        set_epoch=optional_args["set_epoch"],
-        print_rand=optional_args["print_rand"],
+        set_epoch=optional_args.get("set_epoch", True),
+        print_rand=optional_args.get("print_rand", False),
+        aggregate_loss=optional_args.get("aggregate_loss", False)
     )
 
     # Destroy process group
