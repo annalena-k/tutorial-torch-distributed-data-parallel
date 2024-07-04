@@ -189,9 +189,9 @@ def run_training_loop(
         print(f"Test loss on device {device}: {total_test_loss.item() / n_samples_test.item()}")
 
         # Sync all processes before aggregating values
-        print(f"Process with {rank} is waiting at barrier.")
+        print(f"Process dev {device} is waiting at barrier.", flush=True)
         dist.barrier()
-        print(f"Process with {rank} passed the barrier.")
+        print(f"Process dev {device} passed the barrier.")
 
         print("Aggregating loss values ...")
         # Aggregate loss values
