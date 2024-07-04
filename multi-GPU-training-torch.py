@@ -111,7 +111,7 @@ def train(model, train_loader, criterion: Callable, optimizer: optim.Optimizer, 
         
         if batch_idx % 100 == 0:
             print(
-                    f"Device {device}, Batch {batch_idx}, Data {inputs[0,0,100,100:104]}"
+                    f"TRAIN: Device {device}, Batch {batch_idx}, Data {inputs[0,0,100,100:104]}"
             )
         
         # Zero the parameter gradients
@@ -138,7 +138,6 @@ def evaluate(model, test_loader, criterion, device):
     correct = torch.zeros(1, device=device)
     total = torch.zeros(1, device=device)
     total_test_loss = torch.zeros(1, device=device)
-    batch_idx = 0
     with torch.no_grad():
         for inputs, labels in test_loader:
             inputs, labels = inputs.to(device), labels.to(device)
@@ -150,12 +149,6 @@ def evaluate(model, test_loader, criterion, device):
             _, predicted = torch.max(outputs.data, 1)
             total += batch_size
             correct += (predicted == labels).sum().item()
-
-            if batch_idx % 1000 == 0:
-                print(
-                    f"TEST: Device {device}, Batch {batch_idx}, Data {inputs[0, 0, 100, 100:104]}"
-                )
-            batch_idx += int(batch_size)
 
     return total_test_loss, correct, total
 
@@ -174,7 +167,6 @@ def run_training_loop(
     checkpoint_epoch: int = 5,
     set_epoch: bool = True,
     print_rand: bool = False,
-    aggregate_loss: bool = False,
 ):
     print(f"Training on {len(train_loader)} samples, test on {len(test_loader)} samples")
 
@@ -196,7 +188,7 @@ def run_training_loop(
         total_test_loss, n_correct, n_samples_test = evaluate(model, test_loader, criterion, device)
         print(f"Test loss on device {device}: {total_test_loss.item() / n_samples_test.item()}")
 
-        # Ensure all processes have reached this point
+        # Sync all processes before aggregating values
         print(f"Process with {rank} is waiting at barrier.")
         dist.barrier()
         print(f"Process with {rank} passed the barrier.")
@@ -205,7 +197,6 @@ def run_training_loop(
         # Aggregate loss values
         dist.all_reduce(total_train_loss)
         dist.all_reduce(n_samples_train)
-        print(f"all_reduce train loss {total_train_loss}")
         train_loss = total_train_loss / n_samples_train
 
         dist.all_reduce(total_test_loss)
@@ -214,34 +205,8 @@ def run_training_loop(
         test_loss = total_test_loss / n_samples_test
         test_accuracy = 100 * n_correct / n_samples_test
 
-        print(
-            f"Epoch {epoch + 1}/{num_epochs}, "
-            f"Train Loss: {train_loss.item():.4f}, "
-            f"Test Loss: {test_loss.item():.4f}, "
-            f"Test Accuracy: {test_accuracy.item():.2f}%"
-        )
-
-        # Only (aggregate and) print loss vals for one process
-        if False:
-            if aggregate_loss:
-
-                print("Aggregating loss values ...")
-                # Aggregate loss values
-                dist.all_reduce(total_train_loss)
-                dist.all_reduce(n_samples_train)
-                print(f"all_reduce train loss {total_train_loss}")
-                train_loss = total_train_loss / n_samples_train
-
-                dist.all_reduce(total_test_loss)
-                dist.all_reduce(n_correct)
-                dist.all_reduce(n_samples_test)
-                test_loss = total_test_loss / n_samples_test
-                test_accuracy = 100 * n_correct / n_samples_test
-            else:
-                train_loss = total_train_loss / n_samples_train
-                test_loss = total_test_loss / n_samples_test
-                test_accuracy = 100 * n_correct / n_samples_test
-
+        # Only print loss vals for one process
+        if rank == 0:
             print(
                 f"Epoch {epoch + 1}/{num_epochs}, "
                 f"Train Loss: {train_loss.item():.4f}, "
@@ -250,10 +215,12 @@ def run_training_loop(
             )
 
         if epoch % checkpoint_epoch == 0:
-            # only save checkpoint for one process
+            # Only save checkpoint for one process
             if rank == 0:
                 ckpt_path = os.path.join(save_dir, f"ckpt_{epoch}.pt")
                 torch.save(model.state_dict(), ckpt_path)
+            # Sync all processes
+            dist.barrier()
 
     print(f"Finished Training on device {device}.")
 
@@ -293,7 +260,6 @@ def basic_DDP_training_loop(rank: int, world_size: int, save_dir: str, optional_
         save_dir,
         set_epoch=optional_args.get("set_epoch", True),
         print_rand=optional_args.get("print_rand", False),
-        aggregate_loss=optional_args.get("aggregate_loss", False)
     )
 
     # Destroy process group
