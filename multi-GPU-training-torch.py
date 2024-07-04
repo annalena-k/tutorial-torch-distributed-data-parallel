@@ -201,8 +201,28 @@ def run_training_loop(
         dist.barrier()
         print(f"Process with {rank} passed the barrier.")
 
+        print("Aggregating loss values ...")
+        # Aggregate loss values
+        dist.all_reduce(total_train_loss)
+        dist.all_reduce(n_samples_train)
+        print(f"all_reduce train loss {total_train_loss}")
+        train_loss = total_train_loss / n_samples_train
+
+        dist.all_reduce(total_test_loss)
+        dist.all_reduce(n_correct)
+        dist.all_reduce(n_samples_test)
+        test_loss = total_test_loss / n_samples_test
+        test_accuracy = 100 * n_correct / n_samples_test
+
+        print(
+            f"Epoch {epoch + 1}/{num_epochs}, "
+            f"Train Loss: {train_loss.item():.4f}, "
+            f"Test Loss: {test_loss.item():.4f}, "
+            f"Test Accuracy: {test_accuracy.item():.2f}%"
+        )
+
         # Only (aggregate and) print loss vals for one process
-        if rank == 0:
+        if False:
             if aggregate_loss:
 
                 print("Aggregating loss values ...")
