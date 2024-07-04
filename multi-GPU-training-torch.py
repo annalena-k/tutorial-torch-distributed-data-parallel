@@ -196,13 +196,14 @@ def run_training_loop(
         total_test_loss, n_correct, n_samples_test = evaluate(model, test_loader, criterion, device)
         print(f"Test loss on device {device}: {total_test_loss.item() / n_samples_test.item()}")
 
+        # Ensure all processes have reached this point
+        print(f"Process with {rank} is waiting at barrier.")
+        dist.barrier()
+        print(f"Process with {rank} passed the barrier.")
+
         # Only (aggregate and) print loss vals for one process
         if rank == 0:
             if aggregate_loss:
-                # Ensure all processes have reached this point
-                # print(f"Process with {rank} is waiting at barrier.")
-                # dist.barrier()
-                # print(f"Process with {rank} passed the barrier.")
 
                 print("Aggregating loss values ...")
                 # Aggregate loss values
