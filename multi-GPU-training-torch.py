@@ -183,15 +183,15 @@ def run_training_loop(
             print(f"Dev {device}, Torch initial_seed: {torch.initial_seed()}")
 
         total_train_loss, n_samples_train = train(model, train_loader, criterion, optimizer, device)
-        print(f"Train loss on device {device}: {total_train_loss.item() / n_samples_train.item()}")
+        print(f"Train loss on device {device}: {total_train_loss.item() / n_samples_train.item()} based on "
+              f"{n_samples_train.item()} samples")
 
         total_test_loss, n_correct, n_samples_test = evaluate(model, test_loader, criterion, device)
-        print(f"Test loss on device {device}: {total_test_loss.item() / n_samples_test.item()}")
+        print(f"Test loss on device {device}: {total_test_loss.item() / n_samples_test.item()} based on "
+              f"{n_samples_test.item()} samples")
 
         # Sync all processes before aggregating values
-        print(f"Process dev {device} is waiting at barrier.", flush=True)
         dist.barrier()
-        print(f"Process dev {device} passed the barrier.")
 
         print("Aggregating loss values ...")
         # Aggregate loss values
