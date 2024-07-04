@@ -156,7 +156,7 @@ def evaluate(model, test_loader, criterion, device):
             total += batch_size
             correct += (predicted == labels).sum().item()
 
-            if batch_idx % 100 == 0:
+            if batch_idx % 1000 == 0:
                 print(
                     f"TEST: Device {device}, Batch {batch_idx}, Data {inputs[0, 0, 100, 100:104]}"
                 )
@@ -180,6 +180,7 @@ def run_training_loop(
     set_epoch: bool = True,
     print_rand: bool = False
 ):
+    print(f"Training on {len(train_loader)} samples, test on {len(test_loader)} samples")
 
     for epoch in range(num_epochs):
         print(f"Device {device}, Epoch {epoch}")
@@ -208,21 +209,22 @@ def run_training_loop(
         if rank == 0:
             print("Aggregating loss values ...")
             # Aggregate loss values
-            total_train_loss = sum_across_devices(total_train_loss)
-            n_samples_train = sum_across_devices(n_samples_train)
-            train_loss = total_train_loss / n_samples_train
+            train_loss = torch.zeros(1, device=device)
+            train_loss = sum_across_devices(total_train_loss)
+            #n_samples_train = sum_across_devices(n_samples_train)
+            #train_loss = total_train_loss / n_samples_train
 
-            total_test_loss = sum_across_devices(total_test_loss)
-            n_correct = sum_across_devices(n_correct)
-            n_samples_test = sum_across_devices(n_samples_test)
-            test_loss = total_test_loss / n_samples_test
-            test_accuracy = 100 * n_correct / n_samples_test
+            #total_test_loss = sum_across_devices(total_test_loss)
+            #n_correct = sum_across_devices(n_correct)
+            #n_samples_test = sum_across_devices(n_samples_test)
+            #test_loss = total_test_loss / n_samples_test
+            #test_accuracy = 100 * n_correct / n_samples_test
 
             print(
                 f"Epoch {epoch + 1}/{num_epochs}, "
                 f"Train Loss: {train_loss.item():.4f}, "
-                f"Test Loss: {test_loss.item():.4f}, "
-                f"Test Accuracy: {test_accuracy.item():.2f}%"
+                #f"Test Loss: {test_loss.item():.4f}, "
+                #f"Test Accuracy: {test_accuracy.item():.2f}%"
             )
 
         if epoch % checkpoint_epoch == 0:
